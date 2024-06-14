@@ -1,4 +1,4 @@
-describe_indicator('Institutional Supply and Demand Zones', 'price', { shortName: 'Supply/Demand Zones' })
+describe_indicator('Institutional Supply and Demand Zones', 'price', { shortName: 'Maiko Supply/Demand' })
 // Use this value to set the maximum number of zones. Without this maximum number the saved indicator will not paint any.
 const maxNumberOfAreas = 5
 let series = for_every(open, high, close, low, function (o, h, c, l, lastOHCL, index) {
@@ -126,14 +126,31 @@ let series = for_every(open, high, close, low, function (o, h, c, l, lastOHCL, i
             }
         }
     }
-    const top = lastOHCL.demandZones[Object.keys(lastOHCL.demandZones)[Object.keys(lastOHCL.demandZones).length - 1]]
-    const data = { top: top?.top }
-    lastOHCL = { o: o, h: h, c: c, l: l, demandZones: lastOHCL.demandZones, supplyZones: lastOHCL.supplyZones, data: data }
+
+    lastOHCL = { o: o, h: h, c: c, l: l, demandZones: lastOHCL.demandZones, supplyZones: lastOHCL.supplyZones, data: extractDataFrom(lastOHCL) }
     return lastOHCL
 })
 
-let demandUpper = for_every(series, function (s) {
-    return s.data?.top
-})
+function extractDataFrom({ demandZones, supplyZones }) {
+    const demandZone = demandZones[Object.keys(demandZones)[Object.keys(demandZones).length - 1]]
+    const supplyZone = supplyZones[Object.keys(supplyZones)[Object.keys(supplyZones).length - 1]]
+    const data = {
+        demandTop: demandZone?.top,
+        demandBottom: demandZone?.bottom,
+        supplyTop: supplyZone?.top,
+        supplyBottom: supplyZone?.bottom,
+    }
+    return data
+}
 
-paint(demandUpper, { color: 'green', name: 'demandUpper' })
+fill(
+    paint(for_every(series, (s) => s.data?.demandTop), { hidden: true }),
+    paint(for_every(series, (s) => s.data?.demandBottom), { hidden: true }),
+    'green', 0.2, 'Demand',
+)
+
+fill(
+    paint(for_every(series, (s) => s.data?.supplyTop), { hidden: true }),
+    paint(for_every(series, (s) => s.data?.supplyBottom), { hidden: true }),
+    'red', 0.2, 'Supplly',
+)
