@@ -1,10 +1,32 @@
-describe_indicator('Maiko Supply and Demand Zones', 'price', { shortName: 'Maiko Supply/Demand' })
+const perf = false
+describe_indicator('Maiko Supply and Demand Zones', (perf ? 'lower' : 'price'), { shortName: 'Maiko Supply/Demand' })
 // Use this value to set the maximum number of zones. Without this maximum number the saved indicator will not paint any.
-const maxNumberOfAreas = 5
+const maxNumberOfAreas = 1
 const atrs = atr(14)
 
-let series = for_every(open, high, close, low, function (o, h, c, l, lastOHCL, index) {
-  if (index === 0) {
+const midResolution = {
+  '1': '5',
+  '5': '30',
+  '15': '60',
+  '60': '240',
+  '240': 'D',
+  'D': 'W',
+  'W': 'M',
+}[current.resolution]
+console.log(current.resolution, midResolution)
+const mid = await request.history(constants.ticker, midResolution)
+const midLanded = [
+  interpolate_sparse_series(land_points_onto_series(mid.time, mid.open, time), 'constant'),
+  interpolate_sparse_series(land_points_onto_series(mid.time, mid.high, time), 'constant'),
+  interpolate_sparse_series(land_points_onto_series(mid.time, mid.close, time), 'constant'),
+  interpolate_sparse_series(land_points_onto_series(mid.time, mid.low, time), 'constant'),
+]
+let midSeries = []
+midSeries = for_every(...midLanded, main)
+const series = for_every(open, high, close, low, main)
+
+function main(o, h, c, l, lastOHCL, index) {
+  if (index === 0 || lastOHCL == null) {
     lastOHCL = { o: o, h: h, c: c, l: l, demandZones: [], supplyZones: [] }
     return lastOHCL
   }
@@ -134,10 +156,10 @@ let series = for_every(open, high, close, low, function (o, h, c, l, lastOHCL, i
     atr: atrs[index],
     demandZones: lastOHCL.demandZones,
     supplyZones: lastOHCL.supplyZones,
-    data: extractDataFrom(o, h, c, l, atr, lastOHCL),
+    data: extractDataFrom(o, h, c, l, atrs[index], lastOHCL, index),
   }
   return lastOHCL
-})
+}
 
 function colors({ o, h, c, l, data = {} }) {
   const { lastPosition, position, instantExit } = data
@@ -152,7 +174,7 @@ function colors({ o, h, c, l, data = {} }) {
   }
 }
 
-function extractDataFrom(o, h, c, l, atr, { demandZones, supplyZones, data }) {
+function extractDataFrom(o, h, c, l, atr, { demandZones, supplyZones, data }, index) {
   const demandZone = demandZones[Object.keys(demandZones).at(-1)]
   const demandZone2 = demandZones[Object.keys(demandZones).at(-2)]
   const supplyZone = supplyZones[Object.keys(supplyZones).at(-1)]
@@ -167,6 +189,7 @@ function extractDataFrom(o, h, c, l, atr, { demandZones, supplyZones, data }) {
     lastDemandBottom: data?.demandBottom,
     lastSupplyTop: data?.supplyTop,
     lastSupplyBottom: data?.supplyBottom,
+    midSeries: midSeries[index]?.data || {},
   }
   const positionData = extractPositionDataFrom(o, h, c, l, atr, extendedData)
 
@@ -226,6 +249,7 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
 
   // Consider opening a position
   if (!position) {
+    const looseness = 0.3
     const supplyZoneExists = !!lastSupplyBottom
     const supplyZoneSize = lastSupplyTop - lastSupplyBottom
     const demandZoneExists = !!lastDemandTop
@@ -235,16 +259,21 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
     const crossedThroughDemandZone = o > lastDemandTop && l < lastDemandBottom
     const closedInSupplyZone = c > lastSupplyBottom
     const goodLongRatio = supplyZoneExists && lastSupplyBottom - lastDemandTop >= 2 * demandZoneSize
-    console.log(atr)
     const goodDemandZoneSize = demandZoneSize > (0.5 * atr) && demandZoneSize < (2 * atr)
+    const longEnabled = supplyZoneExists
+      ? data.midSeries.lastDemandBottom < lastDemandTop && data.midSeries.lastDemandTop + (looseness * (lastSupplyBottom - lastDemandTop)) > lastDemandTop
+      : data.midSeries.lastDemandBottom < lastDemandTop && data.midSeries.lastDemandTop > lastDemandTop
 
     const crossedIntoSupplyZone = o < lastSupplyBottom && h > lastSupplyBottom
     const crossedThroughSupplyZone = o < lastSupplyBottom && h > lastSupplyTop
     const closedInDemandZone = c < lastDemandTop
     const goodShortRatio = demandZoneExists && lastSupplyBottom - lastDemandTop >= 2 * supplyZoneSize
     const goodSupplyZoneSize = supplyZoneSize > (0.5 * atr) && supplyZoneSize < (2 * atr)
+    const shortEnabled = demandZoneExists
+      ? data.midSeries.lastSupplyBottom < lastSupplyBottom && data.midSeries.lastSupplyTop - (looseness * (lastSupplyBottom - lastDemandTop)) > lastSupplyBottom
+      : data.midSeries.lastSupplyBottom < lastSupplyBottom && data.midSeries.lastSupplyTop > lastSupplyBottom
 
-    if (crossedIntoDemandZone && supplyZoneExists && goodLongRatio && goodDemandZoneSize) {
+    if (crossedIntoDemandZone && supplyZoneExists && goodLongRatio && goodDemandZoneSize && longEnabled) {
       positionData.position = 'long'
       positionData.entry = lastDemandTop
       // Maybe put SL a bit lower
@@ -272,7 +301,7 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
       }
     }
 
-    if (crossedIntoSupplyZone && demandZoneExists && goodShortRatio && goodSupplyZoneSize) {
+    if (crossedIntoSupplyZone && demandZoneExists && goodShortRatio && goodSupplyZoneSize && shortEnabled) {
       positionData.position = 'short'
       positionData.lastPosition = null
       positionData.entry = lastSupplyBottom
@@ -307,22 +336,38 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
   return positionData
 }
 
-fill(
-  paint(for_every(series, (s) => s.data?.demandTop), { hidden: true }),
-  paint(for_every(series, (s) => s.data?.demandBottom), { hidden: true }),
-  'green', 0.2, 'Demand',
-)
+if (perf) {
+  paint(for_every(series, (s) => s.data?.totalProfit), { style: 'line', color: 'white' })
+} else {
+  console.log('hi')
+  fill(
+    paint(for_every(series, (s) => s.data?.demandTop), { hidden: true }),
+    paint(for_every(series, (s) => s.data?.demandBottom), { hidden: true }),
+    'green', 0.4, 'Demand',
+  )
 
-fill(
-  paint(for_every(series, (s) => s.data?.supplyTop), { hidden: true }),
-  paint(for_every(series, (s) => s.data?.supplyBottom), { hidden: true }),
-  'red', 0.2, 'Supply',
-)
+  fill(
+    paint(for_every(series, (s) => s.data?.supplyTop), { hidden: true }),
+    paint(for_every(series, (s) => s.data?.supplyBottom), { hidden: true }),
+    'red', 0.4, 'Supply',
+  )
 
-color_candles(for_every(series, colors))
+  fill(
+    paint(for_every(midSeries, (s) => s.data?.demandTop), { hidden: true }),
+    paint(for_every(midSeries, (s) => s.data?.demandBottom), { hidden: true }),
+    'green', 0.1, 'Demand',
+  )
 
-// paint(for_every(series, ({ data }) => data?.profit > 0 && data?.lastPosition === 'long' && data?.profit), { style: 'labels_above', color: 'green' })
-// paint(for_every(series, ({ data }) => data?.profit > 0 && data?.lastPosition === 'short' && data?.profit), { style: 'labels_below', color: 'green' })
-// paint(for_every(series, ({ data }) => data?.profit < 0 && data?.lastPosition === 'long' && data?.profit), { style: 'labels_below', color: 'red' })
-// paint(for_every(series, ({ data }) => data?.profit < 0 && data?.lastPosition === 'short' && data?.profit), { style: 'labels_above', color: 'red' })
-paint(for_every(series, (s) => s.data?.profit && s.data?.totalProfit), { style: 'labels_above', color: 'white' })
+  fill(
+    paint(for_every(midSeries, (s) => s.data?.supplyTop), { hidden: true }),
+    paint(for_every(midSeries, (s) => s.data?.supplyBottom), { hidden: true }),
+    'red', 0.1, 'Supply',
+  )
+
+  color_candles(for_every(series, colors))
+
+  paint(for_every(series, ({ data }) => data?.profit > 0 && data?.lastPosition === 'long' && data?.profit), { style: 'labels_above', color: 'green' })
+  paint(for_every(series, ({ data }) => data?.profit > 0 && data?.lastPosition === 'short' && data?.profit), { style: 'labels_below', color: 'green' })
+  paint(for_every(series, ({ data }) => data?.profit < 0 && data?.lastPosition === 'long' && data?.profit), { style: 'labels_below', color: 'red' })
+  paint(for_every(series, ({ data }) => data?.profit < 0 && data?.lastPosition === 'short' && data?.profit), { style: 'labels_above', color: 'red' })
+}
