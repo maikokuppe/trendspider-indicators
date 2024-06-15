@@ -1,7 +1,14 @@
+const looseness = input('Looseness', 0.3, { min: 0.0, max: 1.0 })
+const targetRatio = input('Target ratio', 1.0, { min: 0.5, max: 5.0 })
+const minDist = input('Min. distance', 1.0, { min: 0.5, max: 5.0 })
+const minZoneSize = input('Min. zone size', 0.5, { min: 0.1, max: 5.0 })
+const maxZoneSize = input('Max. zone size', 3.0, { min: 0.1, max: 5.0 })
+
 const perf = true
 describe_indicator('Maiko Supply and Demand Zones', (perf ? 'lower' : 'price'), { shortName: 'Maiko Supply/Demand' })
 // Use this value to set the maximum number of zones. Without this maximum number the saved indicator will not paint any.
 const maxNumberOfAreas = 1
+
 const atrs = atr(14)
 
 const midResolution = {
@@ -249,9 +256,6 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
 
   // Consider opening a position
   if (!position) {
-    const looseness = 0.3
-    const targetRatio = 1
-    const minDist = 1
     const supplyZoneExists = !!lastSupplyBottom
     const supplyZoneSize = lastSupplyTop - lastSupplyBottom
     const demandZoneExists = !!lastDemandTop
@@ -261,7 +265,7 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
     const crossedThroughDemandZone = o > lastDemandTop && l < lastDemandBottom
     const closedInSupplyZone = c > lastSupplyBottom
     const goodLongRatio = supplyZoneExists && lastSupplyBottom - lastDemandTop >= minDist * demandZoneSize
-    const goodDemandZoneSize = demandZoneSize > (0.5 * atr) && demandZoneSize < (3 * atr)
+    const goodDemandZoneSize = demandZoneSize > (minZoneSize * atr) && demandZoneSize < (maxZoneSize * atr)
     const longEnabled = supplyZoneExists
       ? data.midSeries.lastDemandBottom < lastDemandTop && data.midSeries.lastDemandTop + (looseness * (lastSupplyBottom - lastDemandTop)) > lastDemandTop
       : data.midSeries.lastDemandBottom < lastDemandTop && data.midSeries.lastDemandTop > lastDemandTop
@@ -270,7 +274,7 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
     const crossedThroughSupplyZone = o < lastSupplyBottom && h > lastSupplyTop
     const closedInDemandZone = c < lastDemandTop
     const goodShortRatio = demandZoneExists && lastSupplyBottom - lastDemandTop >= minDist * supplyZoneSize
-    const goodSupplyZoneSize = supplyZoneSize > (0.5 * atr) && supplyZoneSize < (3 * atr)
+    const goodSupplyZoneSize = supplyZoneSize > (minZoneSize * atr) && supplyZoneSize < (maxZoneSize * atr)
     const shortEnabled = demandZoneExists
       ? data.midSeries.lastSupplyBottom < lastSupplyBottom && data.midSeries.lastSupplyTop - (looseness * (lastSupplyBottom - lastDemandTop)) > lastSupplyBottom
       : data.midSeries.lastSupplyBottom < lastSupplyBottom && data.midSeries.lastSupplyTop > lastSupplyBottom
