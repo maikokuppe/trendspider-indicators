@@ -1,4 +1,4 @@
-const perf = false
+const perf = true
 describe_indicator('Maiko Supply and Demand Zones', (perf ? 'lower' : 'price'), { shortName: 'Maiko Supply/Demand' })
 // Use this value to set the maximum number of zones. Without this maximum number the saved indicator will not paint any.
 const maxNumberOfAreas = 1
@@ -13,7 +13,7 @@ const midResolution = {
   'D': 'W',
   'W': 'M',
 }[current.resolution]
-console.log(current.resolution, midResolution)
+
 const mid = await request.history(constants.ticker, midResolution)
 const midLanded = [
   interpolate_sparse_series(land_points_onto_series(mid.time, mid.open, time), 'constant'),
@@ -189,9 +189,9 @@ function extractDataFrom(o, h, c, l, atr, { demandZones, supplyZones, data }, in
     lastDemandBottom: data?.demandBottom,
     lastSupplyTop: data?.supplyTop,
     lastSupplyBottom: data?.supplyBottom,
-    midSeries: midSeries[index]?.data || {},
+    midSeries: midSeries[index]?.data || {}, // empty if we are calculating midSeries here
   }
-  const positionData = extractPositionDataFrom(o, h, c, l, atr, extendedData)
+  const positionData = midSeries[index] ? extractPositionDataFrom(o, h, c, l, atr, extendedData) : {}
 
   return Object.assign(extendedData, positionData)
 }
@@ -250,6 +250,8 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
   // Consider opening a position
   if (!position) {
     const looseness = 0.3
+    const targetRatio = 1
+    const minDist = 1
     const supplyZoneExists = !!lastSupplyBottom
     const supplyZoneSize = lastSupplyTop - lastSupplyBottom
     const demandZoneExists = !!lastDemandTop
@@ -258,8 +260,8 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
     const crossedIntoDemandZone = o > lastDemandTop && l < lastDemandTop
     const crossedThroughDemandZone = o > lastDemandTop && l < lastDemandBottom
     const closedInSupplyZone = c > lastSupplyBottom
-    const goodLongRatio = supplyZoneExists && lastSupplyBottom - lastDemandTop >= 2 * demandZoneSize
-    const goodDemandZoneSize = demandZoneSize > (0.5 * atr) && demandZoneSize < (2 * atr)
+    const goodLongRatio = supplyZoneExists && lastSupplyBottom - lastDemandTop >= minDist * demandZoneSize
+    const goodDemandZoneSize = demandZoneSize > (0.5 * atr) && demandZoneSize < (3 * atr)
     const longEnabled = supplyZoneExists
       ? data.midSeries.lastDemandBottom < lastDemandTop && data.midSeries.lastDemandTop + (looseness * (lastSupplyBottom - lastDemandTop)) > lastDemandTop
       : data.midSeries.lastDemandBottom < lastDemandTop && data.midSeries.lastDemandTop > lastDemandTop
@@ -267,8 +269,8 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
     const crossedIntoSupplyZone = o < lastSupplyBottom && h > lastSupplyBottom
     const crossedThroughSupplyZone = o < lastSupplyBottom && h > lastSupplyTop
     const closedInDemandZone = c < lastDemandTop
-    const goodShortRatio = demandZoneExists && lastSupplyBottom - lastDemandTop >= 2 * supplyZoneSize
-    const goodSupplyZoneSize = supplyZoneSize > (0.5 * atr) && supplyZoneSize < (2 * atr)
+    const goodShortRatio = demandZoneExists && lastSupplyBottom - lastDemandTop >= minDist * supplyZoneSize
+    const goodSupplyZoneSize = supplyZoneSize > (0.5 * atr) && supplyZoneSize < (3 * atr)
     const shortEnabled = demandZoneExists
       ? data.midSeries.lastSupplyBottom < lastSupplyBottom && data.midSeries.lastSupplyTop - (looseness * (lastSupplyBottom - lastDemandTop)) > lastSupplyBottom
       : data.midSeries.lastSupplyBottom < lastSupplyBottom && data.midSeries.lastSupplyTop > lastSupplyBottom
@@ -279,7 +281,7 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
       // Maybe put SL a bit lower
       // Maybe use minimum SL to avoid fraction
       positionData.stopLoss = lastDemandBottom
-      positionData.takeProfit = Math.min(lastSupplyBottom, lastDemandTop + 3 * demandZoneSize)
+      positionData.takeProfit = Math.min(lastSupplyBottom, lastDemandTop + targetRatio * demandZoneSize)
       positionData.profit = null
 
       if (crossedThroughDemandZone) {
@@ -306,7 +308,7 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
       positionData.lastPosition = null
       positionData.entry = lastSupplyBottom
       positionData.stopLoss = lastSupplyTop
-      positionData.takeProfit = Math.max(lastDemandTop, lastSupplyBottom - 3 * supplyZoneSize)
+      positionData.takeProfit = Math.max(lastDemandTop, lastSupplyBottom - targetRatio * supplyZoneSize)
       positionData.profit = null
 
       if (crossedThroughSupplyZone) {
@@ -339,7 +341,6 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
 if (perf) {
   paint(for_every(series, (s) => s.data?.totalProfit), { style: 'line', color: 'white' })
 } else {
-  console.log('hi')
   fill(
     paint(for_every(series, (s) => s.data?.demandTop), { hidden: true }),
     paint(for_every(series, (s) => s.data?.demandBottom), { hidden: true }),
