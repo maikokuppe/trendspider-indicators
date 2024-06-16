@@ -1,6 +1,7 @@
-const looseness = input('Looseness', 0.3, { min: 0.0, max: 1.0 })
-const targetRatio = input('Target ratio', 1.0, { min: 0.5, max: 5.0 })
-const minDist = input('Min. distance', 1.0, { min: 0.5, max: 5.0 })
+const looseness = input('Looseness', 0.1, { min: 0.0, max: 1.0 })
+const minRatio = input('Min RR', 2.0, { min: 0.5, max: 5.0 })
+const maxRatio = input('Max RR', 2.0, { min: 0.5, max: 5.0 })
+const targetExit = input('Exit', 0.7, { min: 0.2, max: 1.0 })
 const minZoneSize = input('Min. zone size', 0.5, { min: 0.1, max: 5.0 })
 const maxZoneSize = input('Max. zone size', 3.0, { min: 0.1, max: 5.0 })
 
@@ -264,7 +265,7 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
     const crossedIntoDemandZone = o > lastDemandTop && l < lastDemandTop
     const crossedThroughDemandZone = o > lastDemandTop && l < lastDemandBottom
     const closedInSupplyZone = c > lastSupplyBottom
-    const goodLongRatio = supplyZoneExists && lastSupplyBottom - lastDemandTop >= minDist * demandZoneSize
+    const goodLongRatio = supplyZoneExists && lastSupplyBottom - lastDemandTop >= (minRatio / targetExit) * demandZoneSize
     const goodDemandZoneSize = demandZoneSize > (minZoneSize * atr) && demandZoneSize < (maxZoneSize * atr)
     const longEnabled = supplyZoneExists
       ? data.midSeries.lastDemandBottom < lastDemandTop && data.midSeries.lastDemandTop + (looseness * (lastSupplyBottom - lastDemandTop)) > lastDemandTop
@@ -273,7 +274,7 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
     const crossedIntoSupplyZone = o < lastSupplyBottom && h > lastSupplyBottom
     const crossedThroughSupplyZone = o < lastSupplyBottom && h > lastSupplyTop
     const closedInDemandZone = c < lastDemandTop
-    const goodShortRatio = demandZoneExists && lastSupplyBottom - lastDemandTop >= minDist * supplyZoneSize
+    const goodShortRatio = demandZoneExists && lastSupplyBottom - lastDemandTop >= (minRatio / targetExit) * supplyZoneSize
     const goodSupplyZoneSize = supplyZoneSize > (minZoneSize * atr) && supplyZoneSize < (maxZoneSize * atr)
     const shortEnabled = demandZoneExists
       ? data.midSeries.lastSupplyBottom < lastSupplyBottom && data.midSeries.lastSupplyTop - (looseness * (lastSupplyBottom - lastDemandTop)) > lastSupplyBottom
@@ -283,9 +284,12 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
       positionData.position = 'long'
       positionData.entry = lastDemandTop
       // Maybe put SL a bit lower
-      // Maybe use minimum SL to avoid fraction
+      // Maybe use minimum SL to avoid friction
       positionData.stopLoss = lastDemandBottom
-      positionData.takeProfit = Math.min(lastSupplyBottom, lastDemandTop + targetRatio * demandZoneSize)
+      positionData.takeProfit = Math.min(
+        lastDemandTop + targetExit * (lastSupplyBottom - lastDemandTop),
+        lastDemandTop + maxRatio * demandZoneSize,
+      )
       positionData.profit = null
 
       if (crossedThroughDemandZone) {
@@ -312,7 +316,10 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
       positionData.lastPosition = null
       positionData.entry = lastSupplyBottom
       positionData.stopLoss = lastSupplyTop
-      positionData.takeProfit = Math.max(lastDemandTop, lastSupplyBottom - targetRatio * supplyZoneSize)
+      positionData.takeProfit = Math.max(
+        lastSupplyBottom - targetExit * (lastSupplyBottom - lastDemandTop),
+        lastSupplyBottom - maxRatio * supplyZoneSize,
+      )
       positionData.profit = null
 
       if (crossedThroughSupplyZone) {

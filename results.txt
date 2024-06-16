@@ -1,0 +1,59 @@
+ticker timeframe profit maxdd
+
+default l 0.3, tr 1.0, md 1.0, zone 0.5-3.0
+
+06-15
+mnq 1m 66 8 (tr 1.5 87 9.5 - tr 2 101 9.5 - tr 3 111 9.5)
+mnq 5m 75 11 (tr 3 116 26)
+mbt 1m -170 85 (tr 3 -80 160)
+mbt 5m 1705 115 (tr 3 1835 320)
+
+tr 1-3 & zone size -> similar results
+
+mnq 1h -28 160 (l 0.6, tr 2.0, md 4.0, zone 0.5-3.0 125 30)
+mes1 1h        (l 0.6, tr 2.0, md 4.0, zone 0.5-3.0 -2.5 13)
+m2k1 1h        (l 0.6, tr 2.0, md 4.0, zone 0.5-3.0 35 7)
+mym1 1h        (l 0.6, tr 2.0, md 4.0, zone 0.5-3.0 313 133)
+mbt 1h -28 160 (l 0.6, tr 2.0, md 4.0, zone 0.5-3.0 3500 400)
+
+(l 0.6, tr 2.0, md 4.0, zone 0.5-3.0 3500 400)
+forex 1h 14+ 5- (1 mo)
+forex 1h 15+ 5- (full 2.8 mo)
+
+backtest durations
+1m 06-13
+5m 06-06
+1h 04-02
+
+06-15
+default l 0.3, minrr 1.0, maxrr 1.0, exit: 0.7, zone 0.5-3.0
+
+mnq 1m 50 8
+mbt 1m -105 75
+mnq 5m 65 11
+mbt 5m 1150 215
+
+l 0.3, minrr 2.0, maxrr 4.0, exit: 0.7, zone 0.5-3.0
+
+mnq 1m 9 17
+mbt 1m 25 120
+mnq 5m 35 3
+mbt 5m 29 -400
+
+l 0.5, minrr 2.0, maxrr 2.0, exit: 0.7, zone 0.5-3.0
+
+mnq 1h 125 30
+mes 1h 2 16
+m2k 1h 26 6
+mym 1h 267 95
+mbt 1h 4300 700
+
+l 0.1, minrr 2.0, maxrr 2.0, exit: 0.7, zone 0.5-3.0
+
+mnq 5m 78 3
+mes 5m 23 3
+m2k 5m -5.6 0
+mym 5m -119 0
+mbt 5m 115 400
+
+higher mid resolution maybe better. use mid & high for filter!
