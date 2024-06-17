@@ -1,6 +1,7 @@
-const looseness = input('Looseness', 0.1, { min: 0.0, max: 1.0 })
-const minRatio = input('Min RR', 2.0, { min: 0.5, max: 5.0 })
-const maxRatio = input('Max RR', 2.0, { min: 0.5, max: 5.0 })
+const looseness = input('Looseness', 0.2, { min: 0.0, max: 1.0 })
+const loosenessHigh = input('Looseness high', 1.0, { min: 0.0, max: 1.0 })
+const minRatio = input('Min RR', 1.0, { min: 0.5, max: 5.0 })
+const maxRatio = input('Max RR', 1.0, { min: 0.5, max: 5.0 })
 const targetExit = input('Exit', 0.7, { min: 0.2, max: 1.0 })
 const minZoneSize = input('Min. zone size', 0.5, { min: 0.1, max: 5.0 })
 const maxZoneSize = input('Max. zone size', 3.0, { min: 0.1, max: 5.0 })
@@ -12,16 +13,24 @@ const maxNumberOfAreas = 1
 
 const atrs = atr(14)
 
-const midResolution = {
+const resolutionMapping = {
   '1': '5',
   '5': '30',
   '15': '60',
+  '30': '120',
   '60': '240',
+  '120': 'D',
   '240': 'D',
   'D': 'W',
   'W': 'M',
-}[current.resolution]
+}
 
+const midResolution = resolutionMapping[current.resolution]
+const highResolution = resolutionMapping[midResolution]
+let midSeries = []
+let highSeries = []
+
+// Construct mid series
 const mid = await request.history(constants.ticker, midResolution)
 const midLanded = [
   interpolate_sparse_series(land_points_onto_series(mid.time, mid.open, time), 'constant'),
@@ -29,8 +38,19 @@ const midLanded = [
   interpolate_sparse_series(land_points_onto_series(mid.time, mid.close, time), 'constant'),
   interpolate_sparse_series(land_points_onto_series(mid.time, mid.low, time), 'constant'),
 ]
-let midSeries = []
 midSeries = for_every(...midLanded, main)
+
+// Construct mid series
+const hig = await request.history(constants.ticker, highResolution)
+const highLanded = [
+  interpolate_sparse_series(land_points_onto_series(hig.time, hig.open, time), 'constant'),
+  interpolate_sparse_series(land_points_onto_series(hig.time, hig.high, time), 'constant'),
+  interpolate_sparse_series(land_points_onto_series(hig.time, hig.close, time), 'constant'),
+  interpolate_sparse_series(land_points_onto_series(hig.time, hig.low, time), 'constant'),
+]
+highSeries = for_every(...highLanded, main)
+
+// Construct series
 const series = for_every(open, high, close, low, main)
 
 function main(o, h, c, l, lastOHCL, index) {
@@ -198,8 +218,9 @@ function extractDataFrom(o, h, c, l, atr, { demandZones, supplyZones, data }, in
     lastSupplyTop: data?.supplyTop,
     lastSupplyBottom: data?.supplyBottom,
     midSeries: midSeries[index]?.data || {}, // empty if we are calculating midSeries here
+    highSeries: highSeries[index]?.data || {}, // empty if we are calculating midSeries or highSeries here
   }
-  const positionData = midSeries[index] ? extractPositionDataFrom(o, h, c, l, atr, extendedData) : {}
+  const positionData = highSeries[index] ? extractPositionDataFrom(o, h, c, l, atr, extendedData) : {}
 
   return Object.assign(extendedData, positionData)
 }
@@ -267,18 +288,34 @@ function extractPositionDataFrom(o, h, c, l, atr, data) {
     const closedInSupplyZone = c > lastSupplyBottom
     const goodLongRatio = supplyZoneExists && lastSupplyBottom - lastDemandTop >= (minRatio / targetExit) * demandZoneSize
     const goodDemandZoneSize = demandZoneSize > (minZoneSize * atr) && demandZoneSize < (maxZoneSize * atr)
-    const longEnabled = supplyZoneExists
-      ? data.midSeries.lastDemandBottom < lastDemandTop && data.midSeries.lastDemandTop + (looseness * (lastSupplyBottom - lastDemandTop)) > lastDemandTop
-      : data.midSeries.lastDemandBottom < lastDemandTop && data.midSeries.lastDemandTop > lastDemandTop
+    const longEnabled = supplyZoneExists ?
+      (
+        // Mid demand zone exists and entry is in allowed area
+        // !!data.midSeries.lastDemandTop &&
+        data.midSeries.lastDemandBottom < lastDemandTop &&
+        data.midSeries.lastDemandTop + (looseness * (data.midSeries.lastSupplyBottom - data.midSeries.lastDemandTop)) > lastDemandTop //&&
+        // High demand zone exists and entry is in allowed area
+        // !!data.highSeries.lastDemandTop &&
+        // data.highSeries.lastDemandBottom < lastDemandTop &&
+        // data.highSeries.lastDemandTop + (loosenessHigh * (data.highSeries.lastSupplyBottom - data.highSeries.lastDemandTop)) > lastDemandTop
+      ) : data.midSeries.lastDemandBottom < lastDemandTop && data.midSeries.lastDemandTop > lastDemandTop
 
     const crossedIntoSupplyZone = o < lastSupplyBottom && h > lastSupplyBottom
     const crossedThroughSupplyZone = o < lastSupplyBottom && h > lastSupplyTop
     const closedInDemandZone = c < lastDemandTop
     const goodShortRatio = demandZoneExists && lastSupplyBottom - lastDemandTop >= (minRatio / targetExit) * supplyZoneSize
     const goodSupplyZoneSize = supplyZoneSize > (minZoneSize * atr) && supplyZoneSize < (maxZoneSize * atr)
-    const shortEnabled = demandZoneExists
-      ? data.midSeries.lastSupplyBottom < lastSupplyBottom && data.midSeries.lastSupplyTop - (looseness * (lastSupplyBottom - lastDemandTop)) > lastSupplyBottom
-      : data.midSeries.lastSupplyBottom < lastSupplyBottom && data.midSeries.lastSupplyTop > lastSupplyBottom
+    const shortEnabled = demandZoneExists ?
+      (
+        // Mid supply zone exists and entry is in allowed area
+        // !!data.midSeries.lastSupplyTop &&
+        data.midSeries.lastSupplyBottom < lastSupplyBottom &&
+        data.midSeries.lastSupplyTop - (looseness * (data.midSeries.lastSupplyBottom - data.midSeries.lastDemandTop)) > lastSupplyBottom //&&
+        // High supply zone exists and entry is in allowed area
+        // !!data.highSeries.lastSupplyTop &&
+        // data.highSeries.lastSupplyBottom < lastSupplyBottom &&
+        // data.highSeries.lastSupplyTop - (loosenessHigh * (data.highSeries.lastSupplyBottom - data.highSeries.lastDemandTop)) > lastSupplyBottom
+      ) : data.midSeries.lastSupplyBottom < lastSupplyBottom && data.midSeries.lastSupplyTop > lastSupplyBottom
 
     if (crossedIntoDemandZone && supplyZoneExists && goodLongRatio && goodDemandZoneSize && longEnabled) {
       positionData.position = 'long'
